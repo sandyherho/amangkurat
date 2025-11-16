@@ -1,4 +1,4 @@
-# `amangkurat`: Idealized Nonlinear Klein-Gordon Solver
+# `amangkurat`: Idealized $(1+1)$D nonlinear Klein-Gordon solver
 
 [![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
 [![PyPI](https://img.shields.io/badge/pypi-v0.0.1-orange.svg)](https://pypi.org/)
@@ -222,9 +222,9 @@ amangkurat/
 ```bibtex
 @software{herho2025_amangkurat,
   author = {Herho, Sandy H. S.},
-  title = {amangkurat: Nonlinear Klein-Gordon Solver},
+  title = {amangkurat: Idealized Nonlinear Klein-Gordon Solver},
   year = {2025},
   version = {0.0.1},
-  url = {https://github.com/sandyherho/amangkurat-solver}
+  url = {https://github.com/sandyherho/amangkurat}
 }
 ```
