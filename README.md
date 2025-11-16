@@ -29,7 +29,7 @@ Numerical solver for the $(1+1)$-dimensional nonlinear Klein-Gordon equation usi
 
 ### Klein-Gordon Equation
 
-$$(1+1)$-dimensional relativistic field equation in natural units ($c = \hbar = 1$):
+$(1+1)$-dimensional relativistic field equation in natural units ($c = \hbar = 1$):
 
 $$\frac{\partial^2 \phi}{\partial t^2} - \frac{\partial^2 \phi}{\partial x^2} + V'(\phi) = 0$$
 
