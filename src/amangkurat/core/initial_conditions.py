@@ -1,11 +1,4 @@
-"""Initial conditions for Klein-Gordon equation.
-
-CRITICAL FIXES:
-1. Breather IC now uses correct time-dependent solution at t=0
-2. Added proper Lorentz boost for moving kinks
-3. Improved numerical stability for all ICs
-4. Added validation and warnings
-"""
+"""Initial conditions for Klein-Gordon equation."""
 
 import numpy as np
 from typing import Tuple
@@ -91,7 +84,6 @@ class KinkIC:
 class BreatherIC:
     """Breather solution for sine-Gordon equation.
     
-    FIXED VERSION: The breather is a time-periodic, spatially localized solution.
     
     Exact breather solution:
     φ(x,t) = 4·arctan[sin(ωt) / (ω_x cosh(ω_x·x))]

@@ -1,4 +1,4 @@
-"""Stunning 3D visualization for Klein-Gordon solitons."""
+"""3D visualization for Klein-Gordon solitons."""
 
 import numpy as np
 import matplotlib
@@ -31,7 +31,7 @@ class Animator:
         energy = result['energy']
         energy_error = result['energy_error']
         
-        print(f"    Creating stunning 3D animation ({len(t)} frames)...")
+        print(f"    Creating 3D animation ({len(t)} frames)...")
         
         fig = plt.figure(figsize=(16, 10))
         ax = fig.add_subplot(111, projection='3d')

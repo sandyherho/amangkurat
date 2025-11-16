@@ -1,11 +1,4 @@
-"""Klein-Gordon solver with ROBUST adaptive timestepping.
-
-IMPROVEMENTS over previous version:
-1. Stricter limits on dt reduction (minimum dt enforced)
-2. Less aggressive adaptation (smoother changes)
-3. Better error messages with diagnostics
-4. Safety checks to prevent runaway adaptation
-"""
+"""Klein-Gordon solver."""
 
 import numpy as np
 from typing import Dict, Any, Optional, Callable, Tuple
@@ -40,36 +33,74 @@ def compute_force_parallel(phi: np.ndarray, laplacian: np.ndarray,
 
 
 class PhysicalUnits:
-    """Physical units for Klein-Gordon equation."""
-    
+    """Physical units for Klein-Gordon equation.
+
+    Natural units where c = ℏ = 1.
+
+    For φ⁴ theory: V(φ) = (λ/4)(φ² - v²)²
+        - Length scale: ξ = √2/v  (kink width)
+        - Energy scale: E_kink = (2√2/3)λv³  (single kink energy)
+        - Time scale: T = ξ  (light-crossing time)
+        - Mass scale: m = √(2λ)v  (small oscillation frequency)
+
+    For sine-Gordon: V(φ) = 1 - cos(φ)
+        - Length scale: 1 (natural units)
+        - Energy scale: 8 (kink energy)
+        - Time scale: 1
+
+    For linear: V(φ) = ½m²φ²
+        - Length scale: 1/m (Compton wavelength)
+        - Energy scale: m (mass)
+        - Time scale: 1/m (Compton time)
+    """
+
     def __init__(self, potential_type: str = 'phi4', **params):
         self.pot_type = potential_type
-        
+
         if potential_type == 'phi4':
             self.v = params.get('vacuum', 1.0)
             self.lam = params.get('lambda', 1.0)
-            self.length_scale = np.sqrt(2) / self.v
-            self.energy_scale = (2*np.sqrt(2)/3) * self.lam * self.v**3
-            self.time_scale = self.length_scale
+            # Natural scales from kink solution
+            self.length_scale = np.sqrt(2) / self.v  # Kink width ξ
+            self.energy_scale = (2*np.sqrt(2)/3) * self.lam * self.v**3  # E_kink
+            self.time_scale = self.length_scale  # Light-crossing time
+            self.mass_scale = np.sqrt(2 * self.lam) * self.v  # Small oscillation mass
         elif potential_type == 'sine_gordon':
+            # Sine-Gordon in natural units
             self.length_scale = 1.0
-            self.energy_scale = 8.0
+            self.energy_scale = 8.0  # Kink energy
             self.time_scale = 1.0
+            self.mass_scale = 1.0
         elif potential_type == 'linear':
             self.m = params.get('mass', 1.0)
-            self.length_scale = 1.0 / self.m
-            self.energy_scale = self.m
-            self.time_scale = 1.0 / self.m
+            # Compton scales
+            self.length_scale = 1.0 / self.m  # λ_C = ℏ/(mc)
+            self.energy_scale = self.m  # mc²
+            self.time_scale = 1.0 / self.m  # ℏ/(mc²)
+            self.mass_scale = self.m
         else:
             self.length_scale = 1.0
             self.energy_scale = 1.0
             self.time_scale = 1.0
-    
+            self.mass_scale = 1.0
+
+    def to_physical_length(self, x_computational):
+        """Convert computational length to physical length."""
+        return x_computational * self.length_scale
+
+    def to_physical_time(self, t_computational):
+        """Convert computational time to physical time."""
+        return t_computational * self.time_scale
+
+    def to_physical_energy(self, E_computational):
+        """Convert computational energy to physical energy."""
+        return E_computational * self.energy_scale
+
     def __repr__(self):
         return (f"PhysicalUnits({self.pot_type}: "
-                f"L_char={self.length_scale:.4f}, "
-                f"E_char={self.energy_scale:.4f}, "
-                f"T_char={self.time_scale:.4f})")
+                f"L={self.length_scale:.4f}, "
+                f"E={self.energy_scale:.4f}, "
+                f"T={self.time_scale:.4f})")
 
 
 class KGSolver:
@@ -185,18 +216,18 @@ class KGSolver:
                       V_func: Callable) -> float:
         """Compute total energy."""
         grad_phi = self.gradient(phi)
-        
-        kinetic = 0.5 * np.trapezoid(phi_dot**2, self.x)
-        gradient_energy = 0.5 * np.trapezoid(grad_phi**2, self.x)
+
+        kinetic = 0.5 * np.trapz(phi_dot**2, self.x)
+        gradient_energy = 0.5 * np.trapz(grad_phi**2, self.x)
         V_vals = V_func(phi)
-        pot_energy = np.trapezoid(V_vals, self.x)
-        
+        pot_energy = np.trapz(V_vals, self.x)
+
         return kinetic + gradient_energy + pot_energy
     
     def compute_momentum(self, phi: np.ndarray, phi_dot: np.ndarray) -> float:
         """Compute total momentum."""
         grad_phi = self.gradient(phi)
-        return np.trapezoid(phi_dot * grad_phi, self.x)
+        return np.trapz(phi_dot * grad_phi, self.x)
     
     def stormer_verlet_step(self, phi: np.ndarray, phi_old: np.ndarray,
                            dt: float, V_prime: Callable) -> np.ndarray:
@@ -217,13 +248,6 @@ class KGSolver:
                       dt_current: float, step: int) -> Tuple[float, str]:
         """
         ROBUST adaptive timestep control.
-        
-        Changes from previous version:
-        - Less aggressive reduction (90% instead of 80%)
-        - Smaller increase (5% instead of 10%)
-        - Minimum timestep enforced
-        - Maximum timestep enforced
-        - Only adapt every 20 steps (not 10)
         """
         rel_energy_error = abs((energy_current - energy_initial) / (energy_initial + 1e-10))
         
@@ -236,7 +260,7 @@ class KGSolver:
             reason = f"Moderate error {rel_energy_error:.2e}"
         elif rel_energy_error < self.energy_tol / 3:
             dt_new = dt_current * 1.05  # Was 1.1
-            reason = f"Good conservation {rel_error:.2e}"
+            reason = f"Good conservation {rel_energy_error:.2e}"
         else:
             dt_new = dt_current
             reason = "OK"
@@ -306,7 +330,10 @@ class KGSolver:
             self.logger.info("=" * 60)
             self.logger.info("INITIAL CONDITIONS")
             self.logger.info("=" * 60)
-            self.logger.info(f"Energy: E₀ = {energy_initial:.12f}")
+            self.logger.info(f"Energy: E₀ = {energy_initial:.12f} (computational)")
+            E_phys = self.units.to_physical_energy(energy_initial)
+            self.logger.info(f"        E₀ = {E_phys:.12f} (physical units)")
+            self.logger.info(f"        E₀/E_kink = {energy_initial/self.units.energy_scale:.4f}")
             self.logger.info(f"Momentum: P₀ = {momentum_initial:.12f}")
             self.logger.info(f"Max field: max|φ₀| = {np.max(np.abs(phi0)):.6f}")
         

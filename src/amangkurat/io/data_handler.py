@@ -45,9 +45,12 @@ class DataHandler:
             params = result['params']
             nc.nx = int(params['nx'])
             nc.dx = float(params['dx'])
-            nc.dt = float(params['dt'])
+            nc.dt_initial = float(params['dt_initial'])
+            nc.dt_final = float(params['dt_final'])
             nc.potential = str(params['potential'])
             nc.n_cores = int(params['n_cores'])
+            nc.adaptive_dt = int(params.get('adaptive_dt', True))  # Store as int (0/1)
+            nc.energy_tol = float(params.get('energy_tol', 1e-4))
             
             nc.scenario = metadata.get('scenario_name', 'unknown')
             nc.created = datetime.now().isoformat()

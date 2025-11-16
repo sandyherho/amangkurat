@@ -4,6 +4,11 @@ x_min = -40.0
 x_max = 40.0
 t_final = 80.0
 dt = 0.01
+
+# Adaptive timestepping
+adaptive_dt = true
+energy_tol = 1e-5
+
 potential = sine_gordon
 ic_type = breather
 frequency = 0.5

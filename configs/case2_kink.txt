@@ -1,9 +1,20 @@
+# Case 2 - Kink Soliton (Static)
+# For φ⁴ kink: width ξ = √2/v ≈ 1.41, energy E = (2√2/3)λv³ ≈ 0.94
+# Domain should be >> 10ξ to minimize boundary effects
+
 scenario_name = Case 2 - Kink Soliton
-nx = 512
-x_min = -30.0
-x_max = 30.0
+nx = 1024
+x_min = -50.0
+x_max = 50.0
 t_final = 50.0
-dt = 0.01
+
+# Smaller timestep for static soliton (CFL ~ 0.1)
+dt = 0.005
+
+# Adaptive timestepping with strict tolerance
+adaptive_dt = true
+energy_tol = 1e-6
+
 potential = phi4
 lambda = 1.0
 vacuum = 1.0

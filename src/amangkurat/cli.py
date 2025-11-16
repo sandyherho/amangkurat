@@ -19,7 +19,7 @@ from .utils.timer import Timer
 
 def print_header():
     print("\n" + "=" * 70)
-    print(" " * 18 + "AMANGKURAT Klein-Gordon Solver")
+    print(" " * 18 + "amangkurat: Idealized Klein-Gordon Solver")
     print(" " * 25 + "Version 0.0.1")
     print("=" * 70)
     print("\n  Nonlinear Klein-Gordon Equation Solver")
@@ -89,14 +89,16 @@ def run_scenario(config: dict, output_dir: str = "outputs",
         with timer.time_section("solver_init"):
             if verbose:
                 print("\n[1/4] Initializing solver...")
-            
+
             solver = KGSolver(
                 nx=config.get('nx', 512),
                 x_min=config.get('x_min', -30.0),
                 x_max=config.get('x_max', 30.0),
                 verbose=verbose,
                 logger=logger,
-                n_cores=n_cores
+                n_cores=n_cores,
+                adaptive_dt=config.get('adaptive_dt', True),
+                energy_tol=config.get('energy_tol', 1e-4)
             )
         
         with timer.time_section("initial_condition"):
@@ -174,7 +176,7 @@ def run_scenario(config: dict, output_dir: str = "outputs",
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Amangkurat: Klein-Gordon Solver',
+        description='amangkurat: Idealized Klein-Gordon Solver',
         epilog='Example: amangkurat case1 --cores 8'
     )
     
