@@ -1,4 +1,4 @@
-# `amangkurat`: Idealized $(1+1)$D nonlinear Klein-Gordon solver
+# `amangkurat`: Idealized $(1+1)$ D nonlinear Klein-Gordon solver
 
 [![Python](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
 [![PyPI](https://img.shields.io/badge/pypi-v0.0.1-orange.svg)](https://pypi.org/)
