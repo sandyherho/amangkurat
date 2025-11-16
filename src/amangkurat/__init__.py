@@ -1,4 +1,4 @@
-"""Amangkurat: Nonlinear Klein-Gordon Solver"""
+"""amangkurat: Idealized (1+1)D Nonlinear Klein-Gordon Solver"""
 
 __version__ = "0.0.1"
 __author__ = "Sandy H. S. Herho"

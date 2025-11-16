@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "amangkurat"
 version = "0.0.1"
-description = "Idealized relativistic nonlinear Klein-Gordon solver with symplectic methods"
+description = "Symplectic pseudo-spectral solver for (1+1)D nonlinear Klein-Gordon equation with topological solitons, breathers, and Numba acceleration."
 authors = ["Sandy H. S. Herho"]
 license = "MIT"
 readme = "README.md"
