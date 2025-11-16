@@ -42,6 +42,7 @@ dist/
 *.swp
 *.swo
 *~
+
 # Python artifacts
 __pycache__/
 *.py[cod]
