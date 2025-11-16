@@ -35,13 +35,13 @@ dist/
 *.whl
 
 # Claude workspace temporary files
+.claude/
 *.tmp
 *.temp
 *.log
 *.swp
 *.swo
 *~
-
 # Python artifacts
 __pycache__/
 *.py[cod]
