@@ -1,4 +1,4 @@
-"""Klein-Gordon solver."""
+"""Klein-Gordon solver"""
 
 import numpy as np
 from typing import Dict, Any, Optional, Callable, Tuple
@@ -104,12 +104,12 @@ class PhysicalUnits:
 
 
 class KGSolver:
-    """Klein-Gordon solver with ROBUST adaptive timestepping."""
+    """Klein-Gordon solver with FIXED adaptive timestepping."""
     
     def __init__(self, nx: int = 512, x_min: float = -30.0, x_max: float = 30.0,
                  verbose: bool = True, logger: Optional[Any] = None,
                  n_cores: Optional[int] = None, adaptive_dt: bool = True,
-                 energy_tol: float = 1e-4):  # Less strict default
+                 energy_tol: float = 1e-4):
         self.nx = nx
         self.x_min = x_min
         self.x_max = x_max
@@ -282,7 +282,10 @@ class KGSolver:
               dt: float, t_final: float, potential: str = 'phi4',
               n_snapshots: int = 200, **pot_params) -> Dict[str, Any]:
         """
-        Solve Klein-Gordon equation with ROBUST adaptive timestepping.
+        Solve Klein-Gordon equation with FIXED adaptive timestepping.
+        
+        KEY FIX: Velocity calculation now uses centered difference to ensure
+        both position and velocity are evaluated at the same time level.
         """
         self.units = PhysicalUnits(potential, **pot_params)
         
@@ -314,9 +317,21 @@ class KGSolver:
             self.logger.info(f"Initial timestep: dt = {dt:.6f} (enforced limits)")
             self.logger.info(f"Initial CFL number: {initial_cfl:.4f}")
         
-        # Initialize
+        # ====================================================================
+        # FIX #1: Second-order accurate initialization
+        # ====================================================================
         phi = phi0.copy()
-        phi_old = phi0 - dt * phi_dot0
+        
+        # Compute initial force for second-order backward step
+        lap0 = self.laplacian(phi0)
+        V_prime_0 = V_prime(phi0)
+        if NUMBA_AVAILABLE:
+            force0 = compute_force_parallel(phi0, lap0, V_prime_0)
+        else:
+            force0 = lap0 - V_prime_0
+        
+        # Second-order accurate initialization (was first-order before)
+        phi_old = phi0 - dt * phi_dot0 + 0.5 * dt**2 * force0
         
         # Initial quantities
         energy_initial = self.compute_energy(phi0, phi_dot0, V_func)
@@ -367,20 +382,20 @@ class KGSolver:
         # ROBUST: Add step limit to prevent infinite loops
         max_steps = int(t_final / self.dt_min) * 10  # 10× safety margin
         
+        # ====================================================================
+        # FIX #2: Velocity computed with centered difference
+        # ====================================================================
         while t < t_final and step < max_steps:
-            # Time step
+            # Störmer-Verlet step
             phi_new = self.stormer_verlet_step(phi, phi_old, dt_current, V_prime)
             
-            # Update
-            phi_old = phi
-            phi = phi_new
-            t += dt_current
-            step += 1
+            # KEY FIX: Compute velocity at time n using CENTERED difference
+            # This ensures phi and phi_dot are at the same time level!
+            # phi_new is at time n+1, phi is at time n, phi_old is at time n-1
+            # Velocity at time n: v_n = (phi_{n+1} - phi_{n-1}) / (2*dt)
+            phi_dot = (phi_new - phi_old) / (2.0 * dt_current)
             
-            # Compute velocity
-            phi_dot = (phi - phi_old) / dt_current
-            
-            # Diagnostics
+            # Diagnostics at time n (both phi and phi_dot at same time now!)
             energy = self.compute_energy(phi, phi_dot, V_func)
             momentum = self.compute_momentum(phi, phi_dot)
             
@@ -428,6 +443,12 @@ class KGSolver:
                 if self.logger and len(t_out) % 50 == 0:
                     self.logger.info(f"Step {step}: t={t:.4f}, E={energy:.8f}, "
                                    f"ΔE/E₀={energy_error:.2e}, dt={dt_current:.6f}")
+            
+            # Update for next iteration (AFTER computing diagnostics!)
+            phi_old = phi
+            phi = phi_new
+            t += dt_current
+            step += 1
             
             # Update progress
             if pbar is not None:
