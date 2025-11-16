@@ -64,7 +64,23 @@ class SimulationLogger:
         self.info("=" * 60)
         self.info("RESULTS")
         self.info("=" * 60)
-        self.info(f"  Energy error: {results['energy_error']:.2e}")
+        
+        # Log diagnostics if available
+        if 'diagnostics' in results:
+            diag = results['diagnostics']
+            if 'adaptation_count' in diag:
+                self.info(f"  Timestep adaptations: {diag['adaptation_count']}")
+            if 'warnings' in diag and diag['warnings']:
+                self.info(f"  Warnings: {len(diag['warnings'])}")
+        
+        # Log final parameters
+        if 'params' in results:
+            params = results['params']
+            if 'n_steps' in params:
+                self.info(f"  Total steps: {params['n_steps']}")
+            if 'dt_final' in params:
+                self.info(f"  Final timestep: {params['dt_final']:.6f}")
+        
         self.info("=" * 60)
     
     def finalize(self):

@@ -36,12 +36,6 @@ class DataHandler:
             nc_phi[:] = result['phi']
             nc_phi.long_name = "scalar_field"
             
-            nc_energy = nc.createVariable('energy', 'f4', ('t',), zlib=True, complevel=4)
-            nc_energy[:] = result['energy']
-            nc_energy.long_name = "total_energy"
-            
-            nc.energy_error = float(result['energy_error'])
-            
             params = result['params']
             nc.nx = int(params['nx'])
             nc.dx = float(params['dx'])
@@ -49,8 +43,7 @@ class DataHandler:
             nc.dt_final = float(params['dt_final'])
             nc.potential = str(params['potential'])
             nc.n_cores = int(params['n_cores'])
-            nc.adaptive_dt = int(params.get('adaptive_dt', True))  # Store as int (0/1)
-            nc.energy_tol = float(params.get('energy_tol', 1e-4))
+            nc.adaptive_dt = int(params.get('adaptive_dt', True))
             
             nc.scenario = metadata.get('scenario_name', 'unknown')
             nc.created = datetime.now().isoformat()

@@ -28,8 +28,6 @@ class Animator:
         x = result['x']
         t = result['t']
         phi = result['phi']
-        energy = result['energy']
-        energy_error = result['energy_error']
         
         print(f"    Creating 3D animation ({len(t)} frames)...")
         
@@ -71,25 +69,10 @@ class Animator:
         )
         
         time_text = ax.text2D(
-            0.02, 0.97, '', transform=ax.transAxes,
-            fontsize=22, color='#00ff41', weight='bold', ha='left', va='top',
+            0.5, 0.02, '', transform=ax.transAxes,
+            fontsize=22, color='#00ff41', weight='bold', ha='center', va='bottom',
             bbox=dict(boxstyle='round', facecolor='#000814',
                      alpha=0.95, edgecolor='#00ff41', linewidth=3)
-        )
-        
-        energy_text = ax.text2D(
-            0.98, 0.97, '', transform=ax.transAxes,
-            fontsize=13, color='yellow', weight='bold', ha='right', va='top',
-            bbox=dict(boxstyle='round', facecolor='#000814',
-                     alpha=0.9, edgecolor='yellow', linewidth=2)
-        )
-        
-        stats_text = ax.text2D(
-            0.5, 0.02, f'Energy Conservation: Δ = {energy_error:.2e}',
-            transform=ax.transAxes,
-            fontsize=12, color='white', ha='center', va='bottom',
-            bbox=dict(boxstyle='round', facecolor='#000814',
-                     alpha=0.9, edgecolor='lime', linewidth=2)
         )
         
         def animate(frame):
@@ -132,9 +115,8 @@ class Animator:
             ax.grid(True, alpha=0.15, color='cyan', linestyle='--', linewidth=0.5)
             
             time_text.set_text(f't = {t[frame]:.3f}')
-            energy_text.set_text(f'E = {energy[frame]:.6f}\nE₀ = {energy[0]:.6f}')
             
-            return [surf, title_text, time_text, energy_text, stats_text]
+            return [surf, title_text, time_text]
         
         anim = animation.FuncAnimation(
             fig, animate, frames=len(t),
@@ -153,4 +135,4 @@ class Animator:
                      progress_callback=progress_callback)
         
         plt.close(fig)
-        print(f"    ✓ Animation saved: {filepath}")
+        print(f"    Animation saved: {filepath}")

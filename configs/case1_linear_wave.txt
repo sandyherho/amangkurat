@@ -1,18 +1,14 @@
-# Updated config for Case 1 - Linear Wave
-# Conservative timestep for proper energy conservation
+# Case 1 - Linear Wave
 
 scenario_name = Case 1 - Linear Wave
 nx = 512
 x_min = -30.0
 x_max = 30.0
 t_final = 50.0
-
-# Reduced timestep for CFL stability (dx/k_max ~ 0.1)
 dt = 0.005
 
 # Adaptive timestepping enabled
 adaptive_dt = true
-energy_tol = 1e-5
 
 potential = linear
 mass = 1.0

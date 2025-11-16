@@ -1,3 +1,5 @@
+# Case 3 - Breather
+
 scenario_name = Case 3 - Breather
 nx = 512
 x_min = -40.0
@@ -7,7 +9,6 @@ dt = 0.01
 
 # Adaptive timestepping
 adaptive_dt = true
-energy_tol = 1e-5
 
 potential = sine_gordon
 ic_type = breather

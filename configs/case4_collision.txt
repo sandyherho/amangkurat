@@ -1,3 +1,5 @@
+# Case 4 - Kink-Antikink Collision
+
 scenario_name = Case 4 - Kink-Antikink Collision
 nx = 1024
 x_min = -50.0
@@ -7,7 +9,6 @@ dt = 0.005
 
 # Adaptive timestepping
 adaptive_dt = true
-energy_tol = 1e-5
 
 potential = phi4
 lambda = 1.0

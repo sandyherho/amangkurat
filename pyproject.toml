@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "amangkurat-solver"
+name = "amangkurat"
 version = "0.0.1"
-description = "Relativistic nonlinear Klein-Gordon solver with symplectic methods"
+description = "Idealized relativistic nonlinear Klein-Gordon solver with symplectic methods"
 authors = ["Sandy H. S. Herho"]
 license = "MIT"
 readme = "README.md"

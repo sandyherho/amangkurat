@@ -1,4 +1,4 @@
-"""Klein-Gordon solver"""
+"""Idealized Klein-Gordon solver."""
 
 import numpy as np
 from typing import Dict, Any, Optional, Callable, Tuple
@@ -60,23 +60,20 @@ class PhysicalUnits:
         if potential_type == 'phi4':
             self.v = params.get('vacuum', 1.0)
             self.lam = params.get('lambda', 1.0)
-            # Natural scales from kink solution
-            self.length_scale = np.sqrt(2) / self.v  # Kink width ξ
-            self.energy_scale = (2*np.sqrt(2)/3) * self.lam * self.v**3  # E_kink
-            self.time_scale = self.length_scale  # Light-crossing time
-            self.mass_scale = np.sqrt(2 * self.lam) * self.v  # Small oscillation mass
+            self.length_scale = np.sqrt(2) / self.v
+            self.energy_scale = (2*np.sqrt(2)/3) * self.lam * self.v**3
+            self.time_scale = self.length_scale
+            self.mass_scale = np.sqrt(2 * self.lam) * self.v
         elif potential_type == 'sine_gordon':
-            # Sine-Gordon in natural units
             self.length_scale = 1.0
-            self.energy_scale = 8.0  # Kink energy
+            self.energy_scale = 8.0
             self.time_scale = 1.0
             self.mass_scale = 1.0
         elif potential_type == 'linear':
             self.m = params.get('mass', 1.0)
-            # Compton scales
-            self.length_scale = 1.0 / self.m  # λ_C = ℏ/(mc)
-            self.energy_scale = self.m  # mc²
-            self.time_scale = 1.0 / self.m  # ℏ/(mc²)
+            self.length_scale = 1.0 / self.m
+            self.energy_scale = self.m
+            self.time_scale = 1.0 / self.m
             self.mass_scale = self.m
         else:
             self.length_scale = 1.0
@@ -104,19 +101,17 @@ class PhysicalUnits:
 
 
 class KGSolver:
-    """Klein-Gordon solver with FIXED adaptive timestepping."""
+    """Klein-Gordon solver with adaptive timestepping and stability monitoring."""
     
     def __init__(self, nx: int = 512, x_min: float = -30.0, x_max: float = 30.0,
                  verbose: bool = True, logger: Optional[Any] = None,
-                 n_cores: Optional[int] = None, adaptive_dt: bool = True,
-                 energy_tol: float = 1e-4):
+                 n_cores: Optional[int] = None, adaptive_dt: bool = True):
         self.nx = nx
         self.x_min = x_min
         self.x_max = x_max
         self.verbose = verbose
         self.logger = logger
         self.adaptive_dt = adaptive_dt
-        self.energy_tol = energy_tol
         
         # Spatial grid
         self.x = np.linspace(x_min, x_max, nx)
@@ -135,14 +130,12 @@ class KGSolver:
         if NUMBA_AVAILABLE:
             set_num_threads(self.n_cores)
         
-        # ROBUST: Compute minimum and maximum allowed timesteps
-        self.dt_min = 0.1 / self.k_max  # 5× safety factor on CFL
-        self.dt_max = 0.5 / self.k_max  # CFL limit
+        # Timestep limits based on CFL condition
+        self.dt_min = 0.1 / self.k_max
+        self.dt_max = 0.5 / self.k_max
         
         self.units = None
         self.diagnostics = {
-            'energy_history': [],
-            'momentum_history': [],
             'timestep_history': [],
             'cfl_history': [],
             'adaptation_count': 0,
@@ -157,8 +150,6 @@ class KGSolver:
             print(f"  CPU cores: {self.n_cores}")
             print(f"  Numba: {'ENABLED' if NUMBA_AVAILABLE else 'DISABLED'}")
             print(f"  Adaptive dt: {'ENABLED' if adaptive_dt else 'DISABLED'}")
-            if adaptive_dt:
-                print(f"  Energy tolerance: {energy_tol:.2e}")
     
     def laplacian(self, phi: np.ndarray) -> np.ndarray:
         """Compute Laplacian using spectral method."""
@@ -212,23 +203,6 @@ class KGSolver:
         
         return V, V_prime
     
-    def compute_energy(self, phi: np.ndarray, phi_dot: np.ndarray,
-                      V_func: Callable) -> float:
-        """Compute total energy."""
-        grad_phi = self.gradient(phi)
-
-        kinetic = 0.5 * np.trapz(phi_dot**2, self.x)
-        gradient_energy = 0.5 * np.trapz(grad_phi**2, self.x)
-        V_vals = V_func(phi)
-        pot_energy = np.trapz(V_vals, self.x)
-
-        return kinetic + gradient_energy + pot_energy
-    
-    def compute_momentum(self, phi: np.ndarray, phi_dot: np.ndarray) -> float:
-        """Compute total momentum."""
-        grad_phi = self.gradient(phi)
-        return np.trapz(phi_dot * grad_phi, self.x)
-    
     def stormer_verlet_step(self, phi: np.ndarray, phi_old: np.ndarray,
                            dt: float, V_prime: Callable) -> np.ndarray:
         """Single Störmer-Verlet time step."""
@@ -244,28 +218,33 @@ class KGSolver:
         
         return phi_new
     
-    def adapt_timestep(self, energy_current: float, energy_initial: float,
-                      dt_current: float, step: int) -> Tuple[float, str]:
-        """
-        ROBUST adaptive timestep control.
-        """
-        rel_energy_error = abs((energy_current - energy_initial) / (energy_initial + 1e-10))
+    def check_stability(self, phi: np.ndarray, step: int, t: float) -> bool:
+        """Check for numerical instability (NaN or Inf)."""
+        if not np.isfinite(phi).all():
+            warning = f"NaN/Inf detected at step {step}, t={t:.4f}"
+            self.diagnostics['warnings'].append(warning)
+            if self.logger:
+                self.logger.error(warning)
+                self.logger.error(f"  max|φ|: {np.max(np.abs(phi))}")
+            return False
+        return True
+    
+    def adapt_timestep(self, phi: np.ndarray, dt_current: float, step: int) -> Tuple[float, str]:
+        """Adaptive timestep control based on field magnitude."""
+        max_phi = np.max(np.abs(phi))
         
-        # CONSERVATIVE: Less aggressive adaptation
-        if rel_energy_error > 10 * self.energy_tol:
-            dt_new = dt_current * 0.7  # Was 0.5
-            reason = f"Large error {rel_energy_error:.2e}"
-        elif rel_energy_error > 2 * self.energy_tol:
-            dt_new = dt_current * 0.9  # Was 0.8
-            reason = f"Moderate error {rel_energy_error:.2e}"
-        elif rel_energy_error < self.energy_tol / 3:
-            dt_new = dt_current * 1.05  # Was 1.1
-            reason = f"Good conservation {rel_energy_error:.2e}"
+        # Heuristic: reduce timestep if field is growing rapidly
+        if max_phi > 100:
+            dt_new = dt_current * 0.7
+            reason = f"Large field |φ| = {max_phi:.2e}"
+        elif max_phi > 10:
+            dt_new = dt_current * 0.9
+            reason = f"Moderate field |φ| = {max_phi:.2e}"
         else:
-            dt_new = dt_current
-            reason = "OK"
+            dt_new = dt_current * 1.05
+            reason = "Stable"
         
-        # CRITICAL: Enforce limits
+        # Enforce limits
         dt_new = max(self.dt_min, min(dt_new, self.dt_max))
         
         # Warn if hitting minimum
@@ -281,19 +260,14 @@ class KGSolver:
     def solve(self, phi0: np.ndarray, phi_dot0: np.ndarray,
               dt: float, t_final: float, potential: str = 'phi4',
               n_snapshots: int = 200, **pot_params) -> Dict[str, Any]:
-        """
-        Solve Klein-Gordon equation with FIXED adaptive timestepping.
-        
-        KEY FIX: Velocity calculation now uses centered difference to ensure
-        both position and velocity are evaluated at the same time level.
-        """
+        """Solve Klein-Gordon equation with adaptive timestepping."""
         self.units = PhysicalUnits(potential, **pot_params)
         
         if self.verbose:
             print(f"\n  Solving Klein-Gordon equation...")
             print(f"    Potential: {potential}")
             print(f"    dt_initial = {dt:.6f}, t_final = {t_final:.2f}")
-            print(f"    Method: Störmer-Verlet (symplectic)")
+            print(f"    Method: Størmer-Verlet (symplectic)")
             print(f"    {self.units}")
         
         if self.logger:
@@ -306,7 +280,7 @@ class KGSolver:
         # Get potential functions
         V_func, V_prime = self.get_potential_functions(potential, **pot_params)
         
-        # ROBUST: Ensure initial timestep is safe
+        # Ensure initial timestep is safe
         dt = max(self.dt_min, min(dt, self.dt_max))
         initial_cfl = dt * self.k_max
         
@@ -314,15 +288,11 @@ class KGSolver:
             print(f"    Initial CFL number: {initial_cfl:.4f}")
         
         if self.logger:
-            self.logger.info(f"Initial timestep: dt = {dt:.6f} (enforced limits)")
+            self.logger.info(f"Initial timestep: dt = {dt:.6f}")
             self.logger.info(f"Initial CFL number: {initial_cfl:.4f}")
         
-        # ====================================================================
-        # FIX #1: Second-order accurate initialization
-        # ====================================================================
+        # Second-order accurate initialization
         phi = phi0.copy()
-        
-        # Compute initial force for second-order backward step
         lap0 = self.laplacian(phi0)
         V_prime_0 = V_prime(phi0)
         if NUMBA_AVAILABLE:
@@ -330,33 +300,17 @@ class KGSolver:
         else:
             force0 = lap0 - V_prime_0
         
-        # Second-order accurate initialization (was first-order before)
         phi_old = phi0 - dt * phi_dot0 + 0.5 * dt**2 * force0
-        
-        # Initial quantities
-        energy_initial = self.compute_energy(phi0, phi_dot0, V_func)
-        momentum_initial = self.compute_momentum(phi0, phi_dot0)
-        
-        if self.verbose:
-            print(f"    Initial energy: E₀ = {energy_initial:.8f}")
-            print(f"    Initial momentum: P₀ = {momentum_initial:.8f}")
         
         if self.logger:
             self.logger.info("=" * 60)
             self.logger.info("INITIAL CONDITIONS")
             self.logger.info("=" * 60)
-            self.logger.info(f"Energy: E₀ = {energy_initial:.12f} (computational)")
-            E_phys = self.units.to_physical_energy(energy_initial)
-            self.logger.info(f"        E₀ = {E_phys:.12f} (physical units)")
-            self.logger.info(f"        E₀/E_kink = {energy_initial/self.units.energy_scale:.4f}")
-            self.logger.info(f"Momentum: P₀ = {momentum_initial:.12f}")
             self.logger.info(f"Max field: max|φ₀| = {np.max(np.abs(phi0)):.6f}")
         
         # Storage
         t_out = [0.0]
         phi_hist = [phi0.copy()]
-        energy_hist = [energy_initial]
-        momentum_hist = [momentum_initial]
         
         # Integration
         t = 0.0
@@ -365,12 +319,11 @@ class KGSolver:
         snapshot_interval = t_final / n_snapshots
         next_snapshot_time = snapshot_interval
         
-        max_energy_error = 0.0
-        max_momentum_error = 0.0
-        
         if self.verbose:
             print(f"\n  Starting time integration...")
-            pbar = tqdm(total=t_final, desc="  Progress", unit="t")
+            # Configure tqdm with 2 decimal places
+            pbar = tqdm(total=t_final, desc="  Progress", unit="t", 
+                       bar_format='{l_bar}{bar}| {n:.2f}/{total:.2f} [{elapsed}<{remaining}]')
         else:
             pbar = None
         
@@ -379,78 +332,46 @@ class KGSolver:
             self.logger.info("TIME INTEGRATION")
             self.logger.info("=" * 60)
         
-        # ROBUST: Add step limit to prevent infinite loops
-        max_steps = int(t_final / self.dt_min) * 10  # 10× safety margin
+        # Step limit to prevent infinite loops
+        max_steps = int(t_final / self.dt_min) * 10
         
-        # ====================================================================
-        # FIX #2: Velocity computed with centered difference
-        # ====================================================================
         while t < t_final and step < max_steps:
             # Störmer-Verlet step
             phi_new = self.stormer_verlet_step(phi, phi_old, dt_current, V_prime)
             
-            # KEY FIX: Compute velocity at time n using CENTERED difference
-            # This ensures phi and phi_dot are at the same time level!
-            # phi_new is at time n+1, phi is at time n, phi_old is at time n-1
-            # Velocity at time n: v_n = (phi_{n+1} - phi_{n-1}) / (2*dt)
-            phi_dot = (phi_new - phi_old) / (2.0 * dt_current)
+            # Check stability
+            if not self.check_stability(phi_new, step, t):
+                raise RuntimeError(f"Simulation became unstable at t={t:.4f}, step={step}")
             
-            # Diagnostics at time n (both phi and phi_dot at same time now!)
-            energy = self.compute_energy(phi, phi_dot, V_func)
-            momentum = self.compute_momentum(phi, phi_dot)
-            
-            energy_error = abs((energy - energy_initial) / (energy_initial + 1e-10))
-            momentum_error = abs((momentum - momentum_initial) / (abs(momentum_initial) + 1e-10))
-            
-            max_energy_error = max(max_energy_error, energy_error)
-            max_momentum_error = max(max_momentum_error, momentum_error)
-            
-            self.diagnostics['energy_history'].append(energy)
-            self.diagnostics['momentum_history'].append(momentum)
             self.diagnostics['timestep_history'].append(dt_current)
             self.diagnostics['cfl_history'].append(dt_current * self.k_max)
             
-            # ROBUST: Check for catastrophic failure
-            if not np.isfinite(energy) or not np.isfinite(phi).all():
-                error_msg = f"NaN/Inf detected at t={t:.4f}, step={step}"
-                if self.logger:
-                    self.logger.error(error_msg)
-                    self.logger.error(f"  Energy: {energy}")
-                    self.logger.error(f"  max|φ|: {np.max(np.abs(phi))}")
-                    self.logger.error(f"  dt: {dt_current}")
-                    self.logger.error(f"  Last 10 timesteps: {self.diagnostics['timestep_history'][-10:]}")
-                    self.logger.error(f"  Last 10 energies: {self.diagnostics['energy_history'][-10:]}")
-                raise RuntimeError(error_msg)
-            
-            # Adaptive timestepping - ONLY every 20 steps (not 10)
+            # Adaptive timestepping every 20 steps
             if self.adaptive_dt and step % 20 == 0:
-                dt_new, reason = self.adapt_timestep(energy, energy_initial, dt_current, step)
+                dt_new, reason = self.adapt_timestep(phi, dt_current, step)
                 
-                if abs(dt_new - dt_current) / dt_current > 0.05:  # 5% change
+                if abs(dt_new - dt_current) / dt_current > 0.05:
                     self.diagnostics['adaptation_count'] += 1
                     if self.logger and self.diagnostics['adaptation_count'] % 10 == 0:
-                        self.logger.info(f"t={t:.4f}: dt {dt_current:.6f} → {dt_new:.6f} ({reason})")
+                        self.logger.info(f"t={t:.4f}: dt {dt_current:.6f} -> {dt_new:.6f} ({reason})")
                     dt_current = dt_new
             
             # Save snapshot
             if t >= next_snapshot_time or t + dt_current >= t_final:
                 t_out.append(t)
                 phi_hist.append(phi.copy())
-                energy_hist.append(energy)
-                momentum_hist.append(momentum)
                 next_snapshot_time += snapshot_interval
                 
                 if self.logger and len(t_out) % 50 == 0:
-                    self.logger.info(f"Step {step}: t={t:.4f}, E={energy:.8f}, "
-                                   f"ΔE/E₀={energy_error:.2e}, dt={dt_current:.6f}")
+                    self.logger.info(f"Step {step}: t={t:.4f}, dt={dt_current:.6f}")
             
-            # Update for next iteration (AFTER computing diagnostics!)
+            # Update for next iteration
             phi_old = phi
             phi = phi_new
             t += dt_current
             step += 1
             
-            # Update progress
+            # Update progress bar with 2 decimal places
             if pbar is not None:
                 pbar.n = min(t, t_final)
                 pbar.refresh()
@@ -464,19 +385,15 @@ class KGSolver:
             if self.logger:
                 self.logger.warning(warning)
             if self.verbose:
-                print(f"\n  ⚠️  {warning}")
+                print(f"\n  Warning: {warning}")
         
         # Convert to arrays
         t_out = np.array(t_out)
         phi_hist = np.array(phi_hist)
-        energy_hist = np.array(energy_hist)
-        momentum_hist = np.array(momentum_hist)
         
         # Final report
         if self.verbose:
-            print(f"  ✓ Solution computed ({step} steps)")
-            print(f"    Max energy error: ΔE/E₀ = {max_energy_error:.2e}")
-            print(f"    Max momentum error: ΔP/P₀ = {max_momentum_error:.2e}")
+            print(f"  Solution computed ({step} steps)")
             if self.adaptive_dt:
                 print(f"    Timestep adaptations: {self.diagnostics['adaptation_count']}")
         
@@ -486,8 +403,6 @@ class KGSolver:
             self.logger.info("=" * 60)
             self.logger.info(f"Total steps: {step}")
             self.logger.info(f"Final time: t = {t:.6f}")
-            self.logger.info(f"Energy conservation: ΔE/E₀ = {max_energy_error:.3e}")
-            self.logger.info(f"Momentum conservation: ΔP/P₀ = {max_momentum_error:.3e}")
             if self.adaptive_dt:
                 self.logger.info(f"Timestep adaptations: {self.diagnostics['adaptation_count']}")
                 self.logger.info(f"Final timestep: dt = {dt_current:.6f}")
@@ -499,12 +414,6 @@ class KGSolver:
             'x': self.x,
             't': t_out,
             'phi': phi_hist,
-            'energy': energy_hist,
-            'momentum': momentum_hist,
-            'energy_error': max_energy_error,
-            'momentum_error': max_momentum_error,
-            'energy_initial': energy_initial,
-            'momentum_initial': momentum_initial,
             'diagnostics': self.diagnostics,
             'units': self.units,
             'params': {
@@ -520,7 +429,6 @@ class KGSolver:
                 'n_cores': self.n_cores,
                 'numba_enabled': NUMBA_AVAILABLE,
                 'adaptive_dt': self.adaptive_dt,
-                'energy_tol': self.energy_tol,
                 **pot_params
             }
         }
