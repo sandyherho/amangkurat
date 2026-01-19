@@ -114,7 +114,7 @@ class KGSolver:
     Klein-Gordon solver optimized for 1D scalar fields.
     
     Key Features:
-    - Spectral Derivatives (FFT) for high spatial accuracy.
+    - Spectral Derivatives (Real-FFT) for high spatial accuracy and 2x speedup.
     - Symplectic Integration (Störmer-Verlet) for energy stability.
     - Buffer rotation to minimize Garbage Collection overhead.
     """
@@ -134,9 +134,9 @@ class KGSolver:
         self.dx = (x_max - x_min) / (nx - 1)
         self.L = x_max - x_min
         
-        # Pre-compute spectral wavenumbers for FFT derivatives
-        # Computational Complexity: Derivatives will be O(N log N)
-        self.k = 2.0 * np.pi * np.fft.fftfreq(nx, d=self.dx)
+        # Pre-compute spectral wavenumbers for Real-FFT (rfft)
+        # Exploits conjugate symmetry: array size is N//2 + 1, reducing memory and ops.
+        self.k = 2.0 * np.pi * np.fft.rfftfreq(nx, d=self.dx)
         self.k_max = np.max(np.abs(self.k))
         
         # Concurrency setup
@@ -174,19 +174,24 @@ class KGSolver:
     
     def laplacian(self, phi: np.ndarray) -> np.ndarray:
         """
-        Compute Laplacian (d^2/dx^2) using Fourier Spectral Method.
-        Accuracy: Spectral (converges exponentially for smooth functions).
+        Compute Laplacian (d^2/dx^2) using Real Fourier Spectral Method.
+        Accuracy: Spectral. Uses rfft/irfft for ~2x performance gain on real fields.
         """
-        phi_hat = np.fft.fft(phi)
+        phi_hat = np.fft.rfft(phi)
         # Multiply by -k^2 in frequency domain = 2nd derivative in spatial domain
         lap_hat = -(self.k**2) * phi_hat
-        return np.real(np.fft.ifft(lap_hat))
+        # Specify n=self.nx to ensure exact reconstruction size
+        return np.fft.irfft(lap_hat, n=self.nx)
     
     def gradient(self, phi: np.ndarray) -> np.ndarray:
-        """Compute Gradient (d/dx) using Fourier Spectral Method."""
-        phi_hat = np.fft.fft(phi)
+        """
+        Compute Gradient (d/dx) using Real Fourier Spectral Method.
+        Uses rfft/irfft for performance.
+        """
+        phi_hat = np.fft.rfft(phi)
         grad_hat = 1j * self.k * phi_hat
-        return np.real(np.fft.ifft(grad_hat))
+        # Specify n=self.nx to ensure exact reconstruction size
+        return np.fft.irfft(grad_hat, n=self.nx)
     
     def get_potential_functions(self, pot_type: str, **params) -> Tuple[Callable, Callable]:
         """Factory method to generate Potential V(phi) and Force V'(phi) functions."""
